@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sam3-uq"
+version = "0.1.0"
+description = "SAM3-based segmentation uncertainty and data-value scoring framework"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy>=1.24",
+  "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+sam3 = ["torch", "torchvision"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+sam3-uq = "sam3_uq.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
