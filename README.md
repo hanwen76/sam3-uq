@@ -52,6 +52,43 @@ sam3-uq \
   --output /path/to/out
 ```
 
+## Prostate 风格数据批量运行
+
+如果服务器数据类似：
+
+```text
+prostate/
+├── data_npy/
+├── label_npy/
+├── val_data_npy/
+└── val_label_npy/
+```
+
+可以先用 mock 后端跑 5 个样本验证流程：
+
+```bash
+DATA_ROOT=/path/to/prostate \
+CONCEPT=prostate \
+BACKEND=mock \
+LIMIT=5 \
+bash scripts/run_prostate_uq.sh
+```
+
+接入真实 SAM3：
+
+```bash
+DATA_ROOT=/path/to/prostate \
+MASK_DIR=/path/to/model_predictions_npy \
+CONCEPT=prostate \
+BACKEND=sam3-local \
+SAM3_ROOT=/path/to/sam3-main \
+CHECKPOINT_PATH=/path/to/sam3.pt \
+DEVICE=cuda \
+bash scripts/run_prostate_uq.sh
+```
+
+输出会按样本写入 `sam3_uq_out/<sample>/`，并额外生成 `summary.csv`。`MASK_DIR` 应优先指向待评估模型的预测 mask；如果只是调试流程，可以临时使用 `val_label_npy`。
+
 ## 输出
 
 ```text
