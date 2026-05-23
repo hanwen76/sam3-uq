@@ -28,18 +28,29 @@ class RunResult:
 
 
 class ProstatePairs(Dataset):
-    def __init__(self, image_dir: Path, mask_dir: Path, samples: list[str]):
+    def __init__(
+        self,
+        image_dir: Path,
+        mask_dir: Path,
+        samples: list[str],
+        image_name_template: str = "{sample}.png",
+        mask_name_template: str = "{sample}.png",
+    ):
         self.image_dir = image_dir
         self.mask_dir = mask_dir
         self.samples = samples
+        self.image_name_template = image_name_template
+        self.mask_name_template = mask_name_template
 
     def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, idx: int):
         name = self.samples[idx]
-        image = np.asarray(Image.open(self.image_dir / f"{name}.png").convert("RGB"), dtype=np.float32) / 255.0
-        mask = np.asarray(Image.open(self.mask_dir / f"{name}.png").convert("L"), dtype=np.float32)
+        image_path = self.image_dir / self.image_name_template.format(sample=name)
+        mask_path = self.mask_dir / self.mask_name_template.format(sample=name)
+        image = np.asarray(Image.open(image_path).convert("RGB"), dtype=np.float32) / 255.0
+        mask = np.asarray(Image.open(mask_path).convert("L"), dtype=np.float32)
         mask = (mask > 0).astype(np.float32)
         image_t = torch.from_numpy(image).permute(2, 0, 1)
         mask_t = torch.from_numpy(mask).unsqueeze(0)
@@ -92,6 +103,10 @@ def main() -> None:
     parser.add_argument("--train-mask-dir", default="/mnt/diskB/zhw/A_DATASET/Prostate_resize/masks/all/train")
     parser.add_argument("--test-image-dir", default="/mnt/diskB/zhw/A_DATASET/Prostate_resize/imgs/test")
     parser.add_argument("--test-mask-dir", default="/mnt/diskB/zhw/A_DATASET/Prostate_resize/masks/all/test")
+    parser.add_argument("--train-image-template", default="{sample}.png")
+    parser.add_argument("--train-mask-template", default="{sample}.png")
+    parser.add_argument("--test-image-template", default="{sample}.png")
+    parser.add_argument("--test-mask-template", default="{sample}.png")
     parser.add_argument("--uq-summary", default="/mnt/diskB/zhw/SAM3_UQ_RESULTS/sam3_uq_real_prostate_eval_all/train/summary.csv")
     parser.add_argument("--output", default="/mnt/diskB/zhw/SAM3_UQ_RESULTS/data_selection_real_prostate")
     parser.add_argument("--strategies", default="top,bottom,random")
@@ -114,7 +129,7 @@ def main() -> None:
     strategies = [s.strip() for s in args.strategies.split(",") if s.strip()]
     ks = [int(k) for k in args.ks.split(",") if k.strip()]
     seeds = [int(s) for s in args.seeds.split(",") if s.strip()]
-    test_samples = sorted(p.stem for p in Path(args.test_image_dir).glob("*.png"))
+    test_samples = sorted(infer_sample_name(p.name, args.test_image_template) for p in Path(args.test_image_dir).glob("*.png"))
     if args.max_test > 0:
         test_samples = test_samples[: args.max_test]
 
@@ -134,6 +149,10 @@ def main() -> None:
                     test_mask_dir=Path(args.test_mask_dir),
                     train_samples=selected,
                     test_samples=test_samples,
+                    train_image_template=args.train_image_template,
+                    train_mask_template=args.train_mask_template,
+                    test_image_template=args.test_image_template,
+                    test_mask_template=args.test_mask_template,
                     run_dir=run_dir,
                     strategy=strategy,
                     k=k,
@@ -176,6 +195,15 @@ def select_samples(rows: list[dict[str, float | str]], strategy: str, k: int, se
     return [str(row["sample"]) for row in chosen]
 
 
+def infer_sample_name(filename: str, template: str) -> str:
+    prefix, suffix = template.split("{sample}", 1)
+    if prefix and filename.startswith(prefix):
+        filename = filename[len(prefix) :]
+    if suffix and filename.endswith(suffix):
+        filename = filename[: -len(suffix)]
+    return filename
+
+
 def train_and_eval(
     train_image_dir: Path,
     train_mask_dir: Path,
@@ -183,6 +211,10 @@ def train_and_eval(
     test_mask_dir: Path,
     train_samples: list[str],
     test_samples: list[str],
+    train_image_template: str,
+    train_mask_template: str,
+    test_image_template: str,
+    test_mask_template: str,
     run_dir: Path,
     strategy: str,
     k: int,
@@ -197,14 +229,14 @@ def train_and_eval(
     set_seed(seed)
     device_t = torch.device(device if torch.cuda.is_available() and device.startswith("cuda") else "cpu")
     train_loader = DataLoader(
-        ProstatePairs(train_image_dir, train_mask_dir, train_samples),
+        ProstatePairs(train_image_dir, train_mask_dir, train_samples, train_image_template, train_mask_template),
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
         pin_memory=device_t.type == "cuda",
     )
     test_loader = DataLoader(
-        ProstatePairs(test_image_dir, test_mask_dir, test_samples),
+        ProstatePairs(test_image_dir, test_mask_dir, test_samples, test_image_template, test_mask_template),
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
